@@ -1,0 +1,7 @@
+#air
+@ 0 1.
+#background
+sphere 0 0. 0. 10.
+#silicon at 750nm
+@ 2 13.91
+cuboid 2 0.050000 0.100000 0.249500 0.200000
