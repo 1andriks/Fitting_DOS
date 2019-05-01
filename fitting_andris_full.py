@@ -26,6 +26,7 @@ import multiprocessing
 from scipy import fftpack
 
 from scipy.signal import chirp, find_peaks, peak_widths
+from scipy.interpolate import interp1d 
 
 
 def read_txt(t,dt,Nmod,Nmodtext,ff,r,DOS_space,grid,version,wvlen, i):
@@ -40,33 +41,41 @@ def read_txt(t,dt,Nmod,Nmodtext,ff,r,DOS_space,grid,version,wvlen, i):
 
     lama = np.loadtxt(file_path, delimiter=',', unpack=True)[0, :]
     norm_data = np.loadtxt(file_path, delimiter=',', unpack=True)[3, :]
+
+    f=interp1d(lama, norm_data, kind='cubic')
+    inter_lama = np.linspace(np.min(lama), np.max(lama), len(lama)*100) #interpolate lama
+    
+    norm_data_old=norm_data #save old values
+    lama_old=lama
+
+    norm_data=f(inter_lama) #redefine norm_data
+    lama=inter_lama
+
     norm_data=norm_data[np.where(lama>=1.2)]
     lama=lama[np.where(lama>=1.2)]
     peaks, _ = find_peaks(norm_data, height=np.max(norm_data)) #location of max peak
-    results_half = peak_widths(norm_data, peaks, rel_height=0.5) #width of peaks
+    results_half = peak_widths(norm_data, peaks, rel_height=0.4) #width of peaks
     print(np.around(results_half[0]*2))
 
     max_peak = np.max(norm_data)
-    index = np.where(norm_data==max_peak)
-    peak_1 = index-np.around(results_half[0]*2)
-    peak_2 = index+np.around(results_half[0]*2)
+    index = np.where(norm_data==max_peak) #find max peak position
+    peak_1 = index-np.around(results_half[0])
+    peak_2 = index+np.around(results_half[0])
     lama_1=lama[int(peak_1)]
     lama_2=lama[int(peak_2)]
 
     print('lama1 is', lama_1)
     print('lama2 is', lama_2)
 
-    plt.plot(norm_data)
-    plt.plot(peaks, norm_data[peaks], "x")
-    plt.hlines(*results_half[1:], color="red")
-    plt.show()
-
-    index = np.where(norm_data==max_peak)
-    print(index)
+    plt.plot(lama_old, norm_data_old, '.')
+    plt.plot(lama,norm_data, 'tab:red')
+    plt.plot(lama[peaks], norm_data[peaks], "x")
     plt.plot(lama[int(peak_1)],norm_data[int(peak_1)], "x")
     plt.plot(lama[int(peak_2)],norm_data[int(peak_2)], "x")
-    plt.plot(lama, norm_data)
+    plt.hlines(results_half[1],lama[int(results_half[2])], lama[int(results_half[3])], color="red")
     plt.show()
+
+
 ####### TDCMT CLASS
 class tdcmt(object):
 
@@ -267,11 +276,12 @@ class frac_fit(object):
         return np.polyval(a,1j*w)/np.polyval(b,1j*w)
 
 
-############=============MAIN==========##############
+############================================MAIN=====================================##############
 np.set_printoptions(threshold=sys.maxsize)
 fmax = 5
 N_mod = 2500
-i=0.03
+ff=0.03
+i=ff
 #spectr=tdcmt('/Users/erglisa/Desktop/source_ff=0.27/modes.bin', '/Users/erglisa/Desktop/cuboid_ff=0.27_17/modes.bin',5.89664e-12,100000, 2500)
 # read_txt(100001, 5.89664e-12 ,50*50 ,'50x50', i, 0.04, '0.4x1.6_0.4_1.6', '400x400', i, 0.5, 17)
 # spectr=tdcmt('/Users/erglisa/Desktop/source_ff=0.27/modes.bin', 
@@ -293,7 +303,7 @@ spectr.fft_read()
 nmodes = spectr.smode_original.shape[1]
 FTED = np.array([])
 i=0
-nmodes=2500
+nmodes=25
 COEFF= []
 coeff_matrix=np.zeros((20,2))
 w_list = []
