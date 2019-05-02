@@ -27,6 +27,8 @@ from scipy import fftpack
 
 from scipy.signal import chirp, find_peaks, peak_widths
 from scipy.interpolate import interp1d 
+import pprint
+import pandas
 
 
 def read_txt(t,dt,Nmod,Nmodtext,ff,r,DOS_space,grid,version,wvlen, i):
@@ -67,13 +69,13 @@ def read_txt(t,dt,Nmod,Nmodtext,ff,r,DOS_space,grid,version,wvlen, i):
     print('lama1 is', lama_1)
     print('lama2 is', lama_2)
 
-    plt.plot(lama_old, norm_data_old, '.')
-    plt.plot(lama,norm_data, 'tab:red')
-    plt.plot(lama[peaks], norm_data[peaks], "x")
-    plt.plot(lama[int(peak_1)],norm_data[int(peak_1)], "x")
-    plt.plot(lama[int(peak_2)],norm_data[int(peak_2)], "x")
-    plt.hlines(results_half[1],lama[int(results_half[2])], lama[int(results_half[3])], color="red")
-    plt.show()
+    # plt.plot(lama_old, norm_data_old, '.')
+    # plt.plot(lama,norm_data, 'tab:red')
+    # plt.plot(lama[peaks], norm_data[peaks], "x")
+    # plt.plot(lama[int(peak_1)],norm_data[int(peak_1)], "x")
+    # plt.plot(lama[int(peak_2)],norm_data[int(peak_2)], "x")
+    # plt.hlines(results_half[1],lama[int(results_half[2])], lama[int(results_half[3])], color="red")
+    # plt.show()
 
 
 ####### TDCMT CLASS
@@ -81,16 +83,53 @@ class tdcmt(object):
 
     #private
     # fit the spectrum of mode id from th*max to max below fmax with minimum number of poles N
+    def read_len_w(self,id,th,fmax):
+        self.smode=self.smode_original # define smode_original otherwise in gives error about boolean, see fitting_andris.py for loop limiting
+        ff=self.f<=fmax
+        MAX=np.max(np.abs(self.smode[ff,id]))
+
+        msk=(np.abs(self.smode[:,id])>=th*MAX)*(self.f<=fmax)#(self.f>=f0)*(self.f<=f1) #old limit
+        self.w=self.f[msk]
+        fun=self.smode[msk,id]
+
+        # fitting_points = np.sort(np.abs(self.smode[:,id])**2)[::-1] #[::-1] gives the reverse order sorting
+        # limit_of_max_number_points = 10 # int(len(fitting_points)/20)
+        # index_for_fixing_points = np.argpartition(np.abs(self.smode[:,id])**2, -limit_of_max_number_points)[-limit_of_max_number_points:]
+        # self.w=self.f[index_for_fixing_points]
+        # fun=self.smode[index_for_fixing_points,id]
+
+        return len(self.w)
+
+
+
     def fitone(self,id,th,fmax, N = 3, plot=False):
         self.smode=self.smode_original # define smode_original otherwise in gives error about boolean, see fitting_andris.py for loop limiting
         ff=self.f<=fmax
         MAX=np.max(np.abs(self.smode[ff,id]))
+
         msk=(np.abs(self.smode[:,id])>=th*MAX)*(self.f<=fmax)#(self.f>=f0)*(self.f<=f1)
         self.w=self.f[msk]
         fun=self.smode[msk,id]
+        print('len of self.w is ', len(self.w))
 
+
+        # msk2=self.f<=fmax
+        # self.smode=self.smode[msk2]
+        # self.w=self.f[msk2]
+        # fitting_points = np.sort(np.abs(self.smode[:,id])**2)[::-1] #[::-1] gives the reverse order sorting
+        # limit_of_max_number_points =10 #int(len(fitting_points)/20)
+        # index_for_fixing_points = np.argpartition(np.abs(self.smode[:,id])**2, -limit_of_max_number_points)[-limit_of_max_number_points:]
+        # self.w=self.f[index_for_fixing_points]
+        # fun=self.smode[index_for_fixing_points,id]
+       # print(fitting_points[:int(len(fitting_points)/15)])
+        # print(index_for_fixing_points)
+        # print('len of self.w is ', len(self.w))
+
+        
         a=frac_fit()
-        a.fit0(self.w,fun,np.real(fun[0]),N)
+        a.fit0(self.w,fun,np.real(fun[0]),N) ##########===============================this or next one???
+        # a.fit0(self.w,fun,0,N)
+
         self.fted=a.out(self.w)
 
 # lim=np.where(self.f<=fmax)
@@ -110,7 +149,12 @@ class tdcmt(object):
 
         lim=np.where(self.f<=fmax)
         self.w_full=self.f[lim]
-        ind_pos=np.where((np.abs(self.smode[:,id])>=th*MAX)*(self.f<=fmax))
+
+        # ind_pos=np.argpartition(np.abs(self.smode[:,id])**2, -limit_of_max_number_points)[-limit_of_max_number_points:]
+        # print(ind_pos)
+        # indexes=ind_pos
+
+        ind_pos=np.where((np.abs(self.smode[:,id])>=th*MAX)*(self.f<=fmax)) #old one
         indexes = ind_pos[0].tolist()
         self.fted_full=np.zeros(len(ff[lim]), dtype=np.complex)
         for index, replacement in zip(indexes, self.fted):
@@ -132,7 +176,7 @@ class tdcmt(object):
         self.tsteps=tsteps
         self.Nmod=Nmod
     
-    def fft_write(self, fmax):
+    def fft_write(self, fmax, filename_write):
         src = self.src
         ful = self.ful
         dt = self.dt
@@ -183,24 +227,39 @@ class tdcmt(object):
         self.smode_original=tmpf[0:dim,:] #define new variable to use in fitone, otherwise gives boolean error
         self.smode=self.smode[f_limit] #cut everything above 5 in frequency range to save bin file size
         print('self.smode length is', self.smode.shape)
-        np.save('fft_data.npy',self.smode) #saves edited and truncated fft data for fitting
+        np.save(filename_write,self.smode) #saves edited and truncated fft data for fitting
 
 
-    def fft_read(self):
-        tmpf=np.load('fft_data.npy')
+    def fft_read(self, filename):
+        tmpf=np.load(filename)
         self.f=np.fft.fftfreq(self.tsteps+1,self.dt)/sc.c #frequencies 
         dim=int(self.tsteps/2) #half frequency
         self.f=self.f[0:dim] #positive frequency
         self.f=self.f[np.where(self.f<=5)]
         print('self.f shape is', len(self.f))
 
-        for i in range(tmpf.shape[1]):
-            # mask2 = np.where(self.f>lama_2)
-            # mask3 = np.where(self.f<lama_1)
-            mask2 = np.where(self.f>4)
-            mask3 = np.where(self.f<1)
-            tmpf[mask2, i]=0
-            tmpf[mask3, i]=0
+        self.dos_old=np.sum(np.abs(tmpf)**2,axis=1)
+        self.f_old=self.f
+
+        # for i in range(tmpf.shape[1]):
+        #     self.mask2 = np.where(self.f>lama_2) #these are to put zeros where we do not want them to be fit
+        #     self.mask3 = np.where(self.f<lama_1) #these are to put zeros where we do not want them to be fit
+        #     # mask2 = np.where(self.f>4) 
+        #     # mask3 = np.where(self.f<1)
+        #     tmpf[self.mask2, i]=0
+        #     tmpf[self.mask3, i]=0
+
+        # self.mask4 = np.where((self.f>lama_1)*(self.f<lama_2))
+        self.mask4 = np.where((self.f>1)*(self.f<4.5))
+        self.f = self.f[self.mask4]
+        tmpf=tmpf[self.mask4]
+
+        # self.mask2 = np.where(self.f>lama_2) #these are to put zeros where we do not want them to be fit
+        # self.mask3 = np.where(self.f<lama_1) #these are to put zeros where we do not want them to be fit
+        # tmpf[self.mask3]=0
+        # tmpf[self.mask2]=0
+
+
 
         pdsf=np.abs(tmpf)**2 #pds full
         self.dos=np.sum(pdsf,axis=1)
@@ -228,14 +287,16 @@ class frac_fit(object):
     # at M frequencies M=len(w)=len(data)
     # with given behavior at w=0 a_0=real(data(0))
     def fit0(self,w,data,data_0,N):
-        M2=len(w) #2*number of frequency points
+        M2=int(len(w)) #2*number of frequency points
         #assemble linear system
         #RHS
-        f=np.zeros((2*M2,1))
+        f=np.zeros((2*M2,1)) #2*M2; 2 because of real and im parts
         self.a0=data_0
+        
         for i in range(M2):
             f[i]=np.real(data[i])-self.a0
             f[M2+i]=np.imag(data[i])
+        
         #B matrix
         B=np.zeros((2*M2,4*N))
         # assemble B 
@@ -253,12 +314,15 @@ class frac_fit(object):
         # solve system        
         self.f=f
         self.B=B
-        #self.sol=np.linalg.lstsq(B,f,rcond=-1)
+        # self.sol=np.linalg.lstsq(B,f,rcond=-1)
         # weighted lsq
         W=np.diag(f.flatten()**2)
         Bw=np.matmul(W,B)
         fw=np.matmul(W,f)
         self.sol=np.linalg.lstsq(Bw,fw,rcond=-1)
+        # print (pandas.DataFrame(B))
+        # print(self.sol)
+        
         
     # get output of the fit on frequency w
     def out(self,w):
@@ -282,47 +346,84 @@ fmax = 5
 N_mod = 2500
 ff=0.03
 i=ff
-#spectr=tdcmt('/Users/erglisa/Desktop/source_ff=0.27/modes.bin', '/Users/erglisa/Desktop/cuboid_ff=0.27_17/modes.bin',5.89664e-12,100000, 2500)
-# read_txt(100001, 5.89664e-12 ,50*50 ,'50x50', i, 0.04, '0.4x1.6_0.4_1.6', '400x400', i, 0.5, 17)
-# spectr=tdcmt('/Users/erglisa/Desktop/source_ff=0.27/modes.bin', 
-# '/Users/erglisa/Desktop/cuboid_ff=0.27_17/modes.bin',5.89664e-12,100000, N_mod)
 
-# read_txt(100001, 5.89664e-12 ,50*50 ,'50x50', i, 0.04, '0.4x1.6_0.4_1.6', '400x400', i, 0.5, 1)  
+read_txt(100001, 5.89664e-12 ,50*50 ,'50x50', i, 0.04, '0.4x1.6_0.4_1.6', '400x400', i, 0.5, 17)
+spectr=tdcmt('/Users/erglisa/Desktop/source_ff=0.27/modes.bin', 
+'/Users/erglisa/Desktop/cuboid_ff=0.27_17/modes.bin',5.89664e-12,100000, N_mod)
 
 
-read_txt(100001, 5.89664e-12 ,50*50 ,'50x50', i, 0.04, '0.4x1.6_0.4_1.6', '400x400', i, 0.5, 1) 
-spectr=tdcmt('/Users/erglisa/Desktop/source_ff=0.03/modes.bin', 
-            '/Users/erglisa/Desktop/cuboid_ff=0.03_1/modes.bin',5.89664e-12,100000, N_mod)
+# read_txt(100001, 5.89664e-12 ,50*50 ,'50x50', i, 0.04, '0.4x1.6_0.4_1.6', '400x400', i, 0.5, 1) 
+# spectr=tdcmt('/Users/erglisa/Desktop/source_ff=0.03/modes.bin', 
+#             '/Users/erglisa/Desktop/cuboid_ff=0.03_1/modes.bin',5.89664e-12,100000, N_mod)
 
 # spectr=tdcmt('/Users/erglisa/Desktop/source_ff=0.03_25modes_200000/modes.bin', 
 # '/Users/erglisa/Desktop/cuboid_ff=0.03_25modes_200000/modes.bin',5.89664e-12,200000, N_mod)
 
-# spectr.fft_write(5)
-spectr.fft_read()
+# spectr.fft_write(5, 'fft_data_ff=0.27_17.npy')
+
+
+spectr.fft_read('fft_data_ff=0.27_17.npy')
 
 nmodes = spectr.smode_original.shape[1]
 FTED = np.array([])
 i=0
-nmodes=25
+nmodes=2500
 COEFF= []
 coeff_matrix=np.zeros((20,2))
 w_list = []
+
+poles=11
+th = 0.5
+# for i in range(0,2):
+    
+#     # len_w = spectr.read_len_w(i, th, fmax)
+#     # poles = int(len_w/2)
+#     # print('length of function w is', len_w)
+
+#     spectr.fitone(i,th,fmax, N=poles, plot=True)
+#     print('length of w is', len(spectr.w))
+#     print('poles are', int(len(spectr.w)/2))
+#     print('\n')
+# plt.show()
+
 
 plt.figure(figsize=(5,3), dpi = 200)
 plt.xlabel('$1/\lambda$')
 for i in range(nmodes):
     error=[]
     poles =6
-    # th=0.2+i/nmodes*0.4
-    th=0.5#-i/nmodes*0.15
-    spectr.fitone(i,th,fmax, N=poles, plot=False)
+    # th=0.4+i/nmodes*0.3
+    th=0.2#-i/nmodes*0.3
 
+    len_w = spectr.read_len_w(i, th, fmax)
+    poles = int(len_w/20+1) #determine number of poles
+    print(' # of poles is', poles)
+
+    spectr.fitone(i,th,fmax, N=poles, plot=False)
+    print('length of w is', len(spectr.w))
     limit = np.where(spectr.f<=fmax) 
     spectr.smode=spectr.smode[limit]
     masking = spectr.fted_full !=0
     #error = np.sum((np.abs(spectr.smode[:,i])**2-np.abs(spectr.fted_full)**2)**2)
     error.append(np.sum((np.abs(spectr.smode[masking,i])**2-np.abs(spectr.fted_full[masking])**2)**2))
     error1 = (np.abs(spectr.smode[masking,i])**2-np.abs(spectr.fted_full[masking])**2)**2
+    print('error at ' + str(i) + 'th mode is', error)
+    print('max fitted value is', np.max(np.abs(spectr.fted_full[masking]))**2)
+
+    error_point = np.max(np.abs(spectr.fted_full[masking]))**2 - np.max(np.abs(spectr.smode[masking,i]))**2
+
+    while error_point>=1.1*np.max(np.abs(spectr.smode[masking,i]))**2:
+        th = th+0.05
+        spectr.fitone(i,th,fmax, N=poles, plot=False)
+        error.append(np.sum((np.abs(spectr.smode[masking,i])**2-np.abs(spectr.fted_full[masking])**2)**2))
+        error1 = (np.abs(spectr.smode[masking,i])**2-np.abs(spectr.fted_full[masking])**2)**2
+        print('error at ' + str(i) + 'th mode is', error)
+        print('max fitted value is', np.max(np.abs(spectr.fted_full[masking]))**2)
+
+        error_point = np.max(np.abs(spectr.fted_full[masking]))**2 - np.max(np.abs(spectr.smode[masking,i]))**2
+
+    print('error is', )
+
 
     while error[-1]>50:
         poles=poles+1
@@ -353,6 +454,7 @@ for i in range(nmodes):
     coeff_matrix[:,0]=spectr.a.a
     coeff_matrix[:,1]=spectr.a.b
     COEFF.append(coeff_matrix)
+    # plt.show()
 
 plt.show() #show fitted modes plot all together
 with open('coefficients.npz', 'wb') as f:
@@ -370,7 +472,8 @@ print('total_error is', np.sum(total_error**2))
 fig3, ax3 = plt.subplots(2, 1, figsize=(16,8))
 fig3.suptitle('DOS - simulation and fitted', fontsize=16, weight='bold')   #fontname="Times New Roman"#, style='italic' )
 ax3[0].plot(spectr.w_full,fted_DOS, '-',color='tab:red', label='fitted')
-ax3[0].plot(spectr.f, spectr.dos, 'tab:blue', label='Simulation')
+# ax3[0].plot(spectr.f, spectr.dos, 'tab:blue', label='Simulation')
+ax3[0].plot(spectr.f_old, spectr.dos_old, 'tab:blue', label='Simulation')
 ax3[0].set(title='Density of states ', xlabel="1/lambda", ylabel="Amplitude")
 ax3[0].legend()
 ax3[1].plot(spectr.w_full,total_error, '.', color='tab:green', label='Error')
@@ -379,9 +482,11 @@ fig3.tight_layout()
 fig3.subplots_adjust(top=0.86)
 ax3[0].set_xlim(0,5)
 ax3[1].set_xlim(0,5)
+# ax3[0].set_ylim(np.sort(spectr.dos_old)[1]*(1-0.05) , np.max(spectr.dos_old)*(1+0.05))
 # plt.savefig(self.dirName+'/MOD_FF='+str(self.ff)+'_r='+str(self.r) + '_Nmod='+self.Nmodtext+'_t='+str(self.t-1)+'_'+str(i)+'.png', dpi=500)
 plt.show()
 plt.close()    
+
 
 
 
